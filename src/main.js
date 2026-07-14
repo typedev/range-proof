@@ -14,6 +14,23 @@ const main = document.getElementById('report')
 document.getElementById('ucd-version').textContent = unicodeVersion
 renderSpecimen(document.getElementById('drop-specimen'))
 
+// theme: dark by default, manual toggle, persisted (initial value is set
+// by the inline script in index.html before first paint)
+const themeToggle = document.getElementById('theme-toggle')
+
+function applyThemeLabel() {
+  const dark = document.documentElement.dataset.theme !== 'light'
+  themeToggle.textContent = dark ? '☀ light' : '☾ dark'
+}
+
+themeToggle.addEventListener('click', () => {
+  const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'
+  document.documentElement.dataset.theme = next
+  localStorage.setItem('rangeproof-theme', next)
+  applyThemeLabel()
+})
+applyThemeLabel()
+
 // The whole page is a drop target; the drop zone is just the visual cue.
 window.addEventListener('dragover', (e) => {
   e.preventDefault()

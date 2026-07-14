@@ -136,8 +136,7 @@ function cellHtml(cell) {
 
 // The block's coverage fingerprint: one 1-unit-wide tick per codepoint,
 // merged into runs. Gaps (unassigned, unmapped) show the paper background.
-const BAR_COLORS = { present: '#1a1a17', missing: '#e3ded2', extra: '#b98a00' }
-
+// Fills are set in CSS per state so they follow the active theme.
 function barcodeSvg(b) {
   const span = b.end - b.start + 1
   const runs = []
@@ -148,7 +147,7 @@ function barcodeSvg(b) {
     else runs.push({ x, w: 1, state: cell.state })
   }
   const rects = runs.map((r) =>
-    `<rect x="${r.x}" y="0" width="${r.w}" height="10" fill="${BAR_COLORS[r.state]}"/>`,
+    `<rect x="${r.x}" y="0" width="${r.w}" height="10" class="${r.state}"/>`,
   ).join('')
   return `<svg class="bar" viewBox="0 0 ${span} 10" preserveAspectRatio="none"
     role="img" aria-label="Coverage map of ${esc(b.name)}">${rects}</svg>`
@@ -183,11 +182,14 @@ const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)
 const missingLines = (b) =>
   b.missing.map((m) => `U+${hex(m.cp)}\t${m.name}`).join('\n')
 
+const spaceList = (missing) => missing.map((m) => `U+${hex(m.cp)}`).join(' ')
+
 function downloadBlockMissing(startHex) {
   for (const group of currentReport.groups) {
     for (const b of group.blocks) {
       if (hex(b.start) === startHex) {
-        downloadText(`${slug(currentFamily)}-missing-${slug(b.name)}.txt`, missingLines(b) + '\n')
+        const text = `${missingLines(b)}\n\n# as a single list\n${spaceList(b.missing)}\n`
+        downloadText(`${slug(currentFamily)}-missing-${slug(b.name)}.txt`, text)
         return
       }
     }
@@ -196,14 +198,17 @@ function downloadBlockMissing(startHex) {
 
 function downloadAllMissing() {
   const parts = []
+  const all = []
   for (const group of currentReport.groups) {
     for (const b of group.blocks) {
       if (b.missing.length === 0) continue
       parts.push(`# ${b.name} (U+${hex(b.start)}–U+${hex(b.end)}): ${b.missing.length} missing`)
       parts.push(missingLines(b), '')
+      all.push(...b.missing)
     }
   }
   if (!parts.length) return
+  parts.push('# all missing as a single list', spaceList(all), '')
   downloadText(`${slug(currentFamily)}-missing-all.txt`, parts.join('\n'))
 }
 

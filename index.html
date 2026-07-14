@@ -3,14 +3,22 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="color-scheme" content="light" />
   <meta name="description" content="Check a font's coverage of popular Unicode blocks. Runs entirely in your browser — the font never leaves your machine." />
   <title>Range Proof — Unicode coverage for fonts</title>
+  <script>
+    // set before first paint to avoid a theme flash; dark is the default
+    document.documentElement.dataset.theme =
+      localStorage.getItem('rangeproof-theme') || 'dark'
+  </script>
 </head>
 <body>
   <div class="app">
     <header class="top">
-      <h1 class="wordmark">Range&nbsp;Proof</h1>
+      <div class="top-row">
+        <h1 class="wordmark">Range&nbsp;Proof</h1>
+        <button type="button" class="btn theme-toggle" id="theme-toggle"
+                aria-label="Switch color theme"></button>
+      </div>
       <p class="tag">A proofing sheet for Unicode blocks. Drop a font to see which
         blocks it covers, which characters are still missing, and what it maps
         beyond the standard. Everything runs in your browser — the file never

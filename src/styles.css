@@ -2,20 +2,47 @@
    All UI text is monospaced (spec-sheet register); the only proportional
    type on the page is the user's own font, rendered as "ProofFont". */
 
+/* dark is the default theme; light is opt-in via the header toggle */
 :root {
+  color-scheme: dark;
+  --paper: #151512;
+  --card: #1e1e1a;
+  --ink: #e8e8e0;
+  --ink2: #93938a;
+  --dim: #56564e;
+  --line: #2e2e28;
+  --line2: #4b4b43;    /* dashed borders, stronger hairlines */
+  --recess: #191915;
+  --red: #e0604b;      /* proof pen: only for "missing" counts */
+  --amber: #d4a344;    /* mapped but unassigned in Unicode */
+  --amber-line: #4e3f1a;
+  --amber-bg: #272012;
+  --cp: #75756c;       /* codepoint labels */
+  --cp-missing: #5a5a52;
+  --btn2: #55554c;     /* secondary button border */
+  --bar-gap: #35352e;  /* barcode: assigned but missing */
+  --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --glyph: 'ProofFont', 'Helvetica Neue', Arial, sans-serif;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
   --paper: #fafaf7;
   --card: #ffffff;
   --ink: #1a1a17;
   --ink2: #6b6b63;
   --dim: #b8b8ae;
   --line: #e4e4dd;
+  --line2: #c6c6bc;
   --recess: #f0f0ea;
-  --red: #be3220;      /* proof pen: only for "missing" counts */
-  --amber: #9a6a00;    /* mapped but unassigned in Unicode */
+  --red: #be3220;
+  --amber: #9a6a00;
   --amber-line: #e5d5a1;
   --amber-bg: #fffcee;
-  --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  --glyph: 'ProofFont', 'Helvetica Neue', Arial, sans-serif;
+  --cp: #96968c;
+  --cp-missing: #b3b3a9;
+  --btn2: #b9b9b0;
+  --bar-gap: #e3ded2;
 }
 
 * { box-sizing: border-box; }
@@ -46,6 +73,15 @@ button, input, label { font: inherit; }
 /* ------------------------------------------------------------- header */
 
 .top { padding: 20px 0 4px; }
+
+.top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.theme-toggle { white-space: nowrap; }
 
 .wordmark {
   margin: 0;
@@ -81,7 +117,7 @@ button, input, label { font: inherit; }
 .drop {
   margin: 24px 0 8px;
   padding: 24px 20px 20px;
-  border: 1.5px dashed #c6c6bc;
+  border: 1.5px dashed var(--line2);
   border-radius: 8px;
   text-align: center;
   cursor: pointer;
@@ -239,6 +275,9 @@ button, input, label { font: inherit; }
 }
 
 .bar { display: block; width: 100%; height: 9px; }
+.bar .present { fill: var(--ink); }
+.bar .missing { fill: var(--bar-gap); }
+.bar .extra { fill: var(--amber); }
 
 .block-stats {
   display: flex;
@@ -289,12 +328,12 @@ button, input, label { font: inherit; }
 .cell .cp {
   font-size: 9px;
   letter-spacing: 0.03em;
-  color: #96968c;
+  color: var(--cp);
 }
 
 .cell.missing { background: var(--recess); border-color: transparent; }
 .cell.missing .g { color: var(--dim); }
-.cell.missing .cp { color: #b3b3a9; }
+.cell.missing .cp { color: var(--cp-missing); }
 
 .cell.extra { background: var(--amber-bg); border-color: var(--amber-line); }
 .cell.extra .cp { color: var(--amber); font-weight: 600; }
@@ -314,7 +353,7 @@ button, input, label { font: inherit; }
   width: 20px;
   height: 26px;
   margin: 4px 0;
-  border: 1px dashed #c6c6bc;
+  border: 1px dashed var(--line2);
   border-radius: 2px;
 }
 
@@ -323,7 +362,7 @@ button, input, label { font: inherit; }
 .cell.sample .g { font-family: Georgia, 'Times New Roman', serif; color: var(--ink2); }
 
 .block-foot { display: flex; justify-content: flex-end; padding: 10px 2px 2px; }
-.btn-dl { font-size: 11px; padding: 5px 10px; border-color: #b9b9b0; color: var(--ink2); }
+.btn-dl { font-size: 11px; padding: 5px 10px; border-color: var(--btn2); color: var(--ink2); }
 .btn-dl:hover { border-color: var(--ink); }
 
 /* --------------------------------------------------- missing-only mode */
