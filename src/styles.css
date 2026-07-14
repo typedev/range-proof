@@ -253,6 +253,7 @@ button, input, label { font: inherit; }
   border: 1px solid var(--line);
   border-radius: 6px;
   margin-bottom: 12px;
+  scroll-margin-top: 16px;
 }
 
 .block-head {

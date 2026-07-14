@@ -175,6 +175,22 @@ function wire(main) {
     const btn = e.target.closest('.btn-dl')
     if (btn) downloadBlockMissing(btn.dataset.block)
   })
+  main.querySelector('.rail').addEventListener('click', (e) => {
+    const link = e.target.closest('.rail-item')
+    if (!link) return
+    e.preventDefault()
+    const block = main.querySelector(link.getAttribute('href'))
+    if (!block) return
+    // center short blocks; align tall ones to the top so their header
+    // (name, counts, barcode) stays on screen
+    const tall = block.offsetHeight > window.innerHeight * 0.8
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
+    block.scrollIntoView({
+      block: tall ? 'start' : 'center',
+      behavior: reduced ? 'auto' : 'smooth',
+    })
+    history.replaceState(null, '', link.getAttribute('href'))
+  })
 }
 
 const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
