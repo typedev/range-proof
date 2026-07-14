@@ -10,10 +10,11 @@ unreleased fonts are safe to proof.
 
 ## Features
 
-- **41 curated blocks** (Unicode 17.0.0): Latin (incl. IPA and combining
-  marks), Greek, Cyrillic, Armenian, Hebrew, Arabic, Georgian, Devanagari,
-  Thai, Hiragana/Katakana, punctuation, currency, arrows, math, geometric
-  shapes, dingbats and more.
+- **61 curated blocks** (Unicode 17.0.0): the full Latin range (Basic
+  through Extended-G, IPA, phonetic extensions), all combining-mark blocks,
+  Greek, Cyrillic, Armenian, Hebrew, Arabic, Georgian, Devanagari, Thai,
+  Hiragana/Katakana, punctuation, currency, arrows, math, geometric shapes,
+  dingbats and more.
 - **Glyph grid per block**, rendered with the uploaded font itself (via the
   FontFace API). Missing characters are dimmed and shown in a fallback font.
 - **Honest coverage**: "missing" means *assigned in Unicode but absent from
