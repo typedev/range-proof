@@ -7,6 +7,7 @@
 
 import decompressBrotli from 'brotli/decompress.js'
 import { readGlyphNames } from './glyphnames.js'
+import { untransform } from './woff2glyf.js'
 
 const TAG_TTCF = 0x74746366
 const TAG_OTTO = 0x4f54544f
@@ -50,6 +51,9 @@ export async function parseFont(arrayBuffer) {
     format = 'WOFF2'
     flavor = view.getUint32(4)
     ;({ tables, transformed } = readWoff2Tables(bytes, view))
+    // Puts glyf/loca/hmtx back in their plain form where it can; whatever is
+    // left in `transformed` is what rules out rebuilding the font.
+    transformed = untransform(tables, transformed)
   } else if (sig === TAG_V1 || sig === TAG_OTTO || sig === TAG_TRUE) {
     format = sig === TAG_OTTO ? 'OTF' : 'TTF'
     tables = readSfntTables(bytes, view, 0)

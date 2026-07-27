@@ -68,11 +68,13 @@ async function handleFile(file) {
     const buffer = await file.arrayBuffer()
     const font = await parseFont(buffer)
     const fontRendered = await installFontFace(buffer, 'ProofFont')
+    const report = buildReport(font)
     // A copy of the font with one private-use codepoint per glyph id, so the
-    // "Everything in the font" section can draw unencoded glyphs too.
-    const gidFont = buildGidFont(font)
+    // unencoded glyphs can be drawn too — only worth building when there are
+    // any.
+    const gidFont = report.glyphs.unencoded.length ? buildGidFont(font) : null
     const gidRendered = gidFont ? await installFontFace(gidFont, 'ProofGid') : false
-    renderReport(main, buildReport(font), font, { font: fontRendered, gid: gidRendered })
+    renderReport(main, report, font, { font: fontRendered, gid: gidRendered })
     main.hidden = false
     const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
     main.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth' })

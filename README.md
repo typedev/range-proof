@@ -31,8 +31,9 @@ unreleased fonts are safe to proof.
   codepoint reaches.
   Those are drawn by rebuilding the font in memory with a cmap that maps one
   private-use codepoint to every glyph id; glyph names come from `post` or the
-  CFF charset, and the list downloads as text. Grids in this section are built
-  when you open a block, so a CJK font stays responsive.
+  CFF charset, and the list downloads as text. Works for WOFF2 too — the
+  transformed outlines are reconstructed first. Grids in this section are
+  built when you open a block, so a CJK font stays responsive.
 
 ## Development
 
@@ -52,13 +53,17 @@ npm run build    # static build in dist/ — host anywhere
   but only to tell which glyphs a codepoint can reach.
 - `src/font/glyphnames.js` — glyph names from `post` format 2.0 or the CFF
   charset (`src/font/stdnames.js` holds the two standard name tables).
+- `src/font/woff2glyf.js` — undoes the WOFF2 table transforms: rebuilds
+  `glyf` from its nine sub-streams (triplet-encoded coordinates, composite
+  stream, bbox bitmap, `overlapSimpleBitmap`), writes a long-format `loca`
+  and patches `head.indexToLocFormat` to match, and restores the `hmtx` side
+  bearings from each glyph's xMin. Best-effort: a file it cannot untransform
+  stays marked as transformed and falls back to a listing without shapes.
 - `src/font/rebuild.js` — re-emits the parsed tables as a plain sfnt whose
   cmap maps U+F0000 + *gid* to every glyph, so unencoded glyphs can be drawn
   as a second `FontFace`. GSUB/GPOS/kern are dropped so the browser's default
   features cannot substitute one glyph for another; DSIG is dropped because
-  the edit invalidates it. WOFF2 keeps `glyf`/`loca` in a transformed
-  encoding this app does not undo, so those files fall back to a listing
-  without shapes.
+  the edit invalidates it.
 - `src/coverage.js` — intersects the font's codepoint set with the curated
   block data, and groups everything else by its real Unicode block.
 - `src/ui.js`, `src/styles.css` — no-framework rendering.
@@ -87,6 +92,12 @@ The parser was cross-checked against fontTools: for TTF, CFF-OTF, variable
 OTF, WOFF and WOFF2 inputs, the extracted codepoint sets match fontTools'
 `cmap` output exactly, glyph names match `getGlyphOrder()` for both the
 `post` and CFF paths, and the rebuilt GID font loads in fontTools with valid
-checksums and a cmap that maps U+F0000 + *gid* to the right glyph (see the
-scripts in the repo history / your own `fontTools` install if you want to
-re-run the comparison).
+checksums and a cmap that maps U+F0000 + *gid* to the right glyph.
+
+The WOFF2 untransform was checked the same way: for `liberation.woff2`,
+`sample.woff2` (short `loca`) and fixtures with a transformed `hmtx` and with
+`OVERLAP_SIMPLE` set, every reconstructed glyph matches fontTools' own
+reconstruction exactly — contour counts, endpoints, coordinates, full flag
+bytes, bounding boxes, instructions, components and `hmtx` metrics. fontTools
+needs the `brotli` package to read WOFF2; install it in a venv to re-run the
+comparison (see the scripts in the repo history).
