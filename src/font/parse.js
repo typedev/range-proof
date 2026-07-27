@@ -1,8 +1,12 @@
 // Font parsing: extracts the set of mapped Unicode codepoints plus basic
 // naming info from TTF / OTF / TTC / WOFF / WOFF2 binaries. No rendering —
 // glyph drawing is done by the browser via the FontFace API.
+//
+// The raw tables are kept as well: rebuild.js re-emits them as a plain sfnt
+// with a synthetic cmap so glyphs no codepoint reaches can still be drawn.
 
 import decompressBrotli from 'brotli/decompress.js'
+import { readGlyphNames } from './glyphnames.js'
 
 const TAG_TTCF = 0x74746366
 const TAG_OTTO = 0x4f54544f
@@ -34,12 +38,18 @@ export async function parseFont(arrayBuffer) {
 
   let tables // { tag: Uint8Array }
   let format
+  let flavor = sig
+  // WOFF/WOFF2 tables that arrive in a transformed encoding this parser does
+  // not undo; their presence rules out rebuilding the font (see rebuild.js).
+  let transformed = []
   if (sig === TAG_WOFF) {
     format = 'WOFF'
+    flavor = view.getUint32(4)
     tables = await readWoffTables(bytes, view)
   } else if (sig === TAG_WOF2) {
     format = 'WOFF2'
-    tables = readWoff2Tables(bytes, view)
+    flavor = view.getUint32(4)
+    ;({ tables, transformed } = readWoff2Tables(bytes, view))
   } else if (sig === TAG_V1 || sig === TAG_OTTO || sig === TAG_TRUE) {
     format = sig === TAG_OTTO ? 'OTF' : 'TTF'
     tables = readSfntTables(bytes, view, 0)
@@ -52,7 +62,7 @@ export async function parseFont(arrayBuffer) {
 
   if (!tables.cmap) throw new ParseError('Font has no cmap table.')
 
-  const codepoints = parseCmap(tables.cmap)
+  const { codepoints, encodedGids } = parseCmap(tables.cmap)
   const names = tables.name ? parseName(tables.name) : {}
   const numGlyphs = tables.maxp ? new DataView(
     tables.maxp.buffer, tables.maxp.byteOffset, tables.maxp.byteLength,
@@ -61,23 +71,51 @@ export async function parseFont(arrayBuffer) {
   return {
     format,
     codepoints,
+    encodedGids,
     numGlyphs,
+    zeroWidthGids: readZeroWidthGids(tables, numGlyphs, transformed),
+    glyphNames: numGlyphs ? readGlyphNames(tables, numGlyphs) : null,
     family: names.family || null,
     subfamily: names.subfamily || null,
     version: names.version || null,
+    binary: { tables, flavor, transformed },
   }
+}
+
+// -------------------------------------------------------------------- hmtx
+
+// Glyphs with no advance are combining marks, which need a base to sit on to
+// be legible in a grid. Returns an empty set when the widths are unreadable.
+function readZeroWidthGids(tables, numGlyphs, transformed) {
+  const zero = new Set()
+  if (!numGlyphs || !tables.hhea || !tables.hmtx) return zero
+  if (transformed.includes('hmtx') || transformed.includes('hhea')) return zero
+
+  const hhea = new DataView(tables.hhea.buffer, tables.hhea.byteOffset, tables.hhea.byteLength)
+  const numberOfHMetrics = hhea.getUint16(34)
+  const hmtx = new DataView(tables.hmtx.buffer, tables.hmtx.byteOffset, tables.hmtx.byteLength)
+
+  let lastAdvance = 0
+  for (let gid = 0; gid < numGlyphs; gid++) {
+    if (gid < numberOfHMetrics) {
+      if (gid * 4 + 2 > hmtx.byteLength) break
+      lastAdvance = hmtx.getUint16(gid * 4)
+    }
+    // Glyphs past numberOfHMetrics all share the last advance width.
+    if (lastAdvance === 0) zero.add(gid)
+  }
+  return zero
 }
 
 // ---------------------------------------------------------------- sfnt / TTC
 
-function readSfntTables(bytes, view, base, wanted = ['cmap', 'name', 'maxp']) {
+function readSfntTables(bytes, view, base) {
   const numTables = view.getUint16(base + 4)
   const tables = {}
   for (let i = 0; i < numTables; i++) {
     const rec = base + 12 + i * 16
     if (rec + 16 > bytes.length) throw new ParseError('Truncated table directory.')
     const tag = tagToString(view.getUint32(rec))
-    if (!wanted.includes(tag)) continue
     const offset = view.getUint32(rec + 8)
     const length = view.getUint32(rec + 12)
     if (offset + length > bytes.length) throw new ParseError(`Table ${tag} exceeds file size.`)
@@ -88,13 +126,12 @@ function readSfntTables(bytes, view, base, wanted = ['cmap', 'name', 'maxp']) {
 
 // --------------------------------------------------------------------- WOFF
 
-async function readWoffTables(bytes, view, wanted = ['cmap', 'name', 'maxp']) {
+async function readWoffTables(bytes, view) {
   const numTables = view.getUint16(12)
   const tables = {}
   for (let i = 0; i < numTables; i++) {
     const rec = 44 + i * 20
     const tag = tagToString(view.getUint32(rec))
-    if (!wanted.includes(tag)) continue
     const offset = view.getUint32(rec + 4)
     const compLength = view.getUint32(rec + 8)
     const origLength = view.getUint32(rec + 12)
@@ -113,7 +150,7 @@ async function inflate(bytes) {
 
 // -------------------------------------------------------------------- WOFF2
 
-function readWoff2Tables(bytes, view, wanted = ['cmap', 'name', 'maxp']) {
+function readWoff2Tables(bytes, view) {
   const numTables = view.getUint16(12)
   const totalCompressedSize = view.getUint32(20)
 
@@ -144,7 +181,7 @@ function readWoff2Tables(bytes, view, wanted = ['cmap', 'name', 'maxp']) {
       pos = p2
       streamLength = transformLength
     }
-    entries.push({ tag, streamLength })
+    entries.push({ tag, streamLength, isTransformed })
   }
 
   const compressed = bytes.subarray(pos, pos + totalCompressedSize)
@@ -154,14 +191,14 @@ function readWoff2Tables(bytes, view, wanted = ['cmap', 'name', 'maxp']) {
   // The decompressed stream is all tables concatenated in directory order,
   // without padding.
   const tables = {}
+  const transformed = []
   let offset = 0
-  for (const { tag, streamLength } of entries) {
-    if (wanted.includes(tag)) {
-      tables[tag] = decompressed.subarray(offset, offset + streamLength)
-    }
+  for (const { tag, streamLength, isTransformed } of entries) {
+    tables[tag] = decompressed.subarray(offset, offset + streamLength)
+    if (isTransformed) transformed.push(tag)
     offset += streamLength
   }
-  return tables
+  return { tables, transformed }
 }
 
 function readUIntBase128(bytes, pos) {
@@ -194,18 +231,32 @@ function parseCmap(table) {
   }
 
   const codepoints = new Set()
+  const encodedGids = new Set()
   // Union of all Unicode subtables; fall back to whatever exists (e.g.
   // symbol-encoded fonts) if there are none.
   const chosen = unicodeSubtables.length ? unicodeSubtables : otherSubtables
-  for (const offset of chosen) parseCmapSubtable(view, offset, codepoints)
-  return codepoints
+  for (const offset of chosen) parseCmapSubtable(view, offset, codepoints, encodedGids)
+  // Which glyphs count as "reachable by a codepoint" is a broader question
+  // than which codepoints the font claims: a legacy Mac subtable or a
+  // variation sequence reaches glyphs too.
+  for (const offset of otherSubtables) {
+    if (!chosen.includes(offset)) parseCmapSubtable(view, offset, null, encodedGids)
+  }
+  return { codepoints, encodedGids }
 }
 
-function parseCmapSubtable(view, off, out) {
+// Collects codepoints into `out` (may be null) and the glyph ids they reach
+// into `gids` (may be null).
+function parseCmapSubtable(view, off, out, gids) {
   const format = view.getUint16(off)
+  const add = (cp, gid) => {
+    out?.add(cp)
+    gids?.add(gid)
+  }
   if (format === 0) {
     for (let c = 0; c < 256; c++) {
-      if (view.getUint8(off + 6 + c) !== 0) out.add(c)
+      const gid = view.getUint8(off + 6 + c)
+      if (gid !== 0) add(c, gid)
     }
   } else if (format === 4) {
     const segCount = view.getUint16(off + 6) / 2
@@ -228,14 +279,28 @@ function parseCmapSubtable(view, off, out) {
           glyph = view.getUint16(addr)
           if (glyph !== 0) glyph = (glyph + idDelta) & 0xffff
         }
-        if (glyph !== 0) out.add(c)
+        if (glyph !== 0) add(c, glyph)
       }
     }
   } else if (format === 6) {
     const first = view.getUint16(off + 6)
     const count = view.getUint16(off + 8)
     for (let i = 0; i < count; i++) {
-      if (view.getUint16(off + 10 + i * 2) !== 0) out.add(first + i)
+      const gid = view.getUint16(off + 10 + i * 2)
+      if (gid !== 0) add(first + i, gid)
+    }
+  } else if (format === 14) {
+    // Variation sequences: the glyphs listed for non-default sequences are
+    // reachable, but only through a selector, so they add no codepoints.
+    const numRecords = view.getUint32(6)
+    for (let i = 0; i < numRecords; i++) {
+      const rec = off + 10 + i * 11
+      const nonDefault = view.getUint32(rec + 7)
+      if (nonDefault === 0) continue
+      const numMappings = view.getUint32(off + nonDefault)
+      for (let m = 0; m < numMappings; m++) {
+        gids?.add(view.getUint16(off + nonDefault + 4 + m * 5 + 3))
+      }
     }
   } else if (format === 12 || format === 13) {
     const nGroups = view.getUint32(off + 12)
@@ -247,12 +312,11 @@ function parseCmapSubtable(view, off, out) {
       if (end - start > 0x10ffff) throw new ParseError('Malformed cmap group.')
       for (let c = start; c <= end; c++) {
         const glyph = format === 12 ? startGlyph + (c - start) : startGlyph
-        if (glyph !== 0) out.add(c)
+        if (glyph !== 0) add(c, glyph)
       }
     }
   }
-  // Formats 2, 8, 10 and 14 are skipped: 2/8/10 are practically extinct,
-  // 14 maps variation sequences rather than plain codepoints.
+  // Formats 2, 8 and 10 are skipped: they are practically extinct.
 }
 
 // -------------------------------------------------------------------- name

@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
-"""Generate src/data/blocks.json from Unicode Character Database files.
+"""Generate src/data/blocks.json and src/data/names.json from Unicode
+Character Database files.
 
 Usage:
     python3 tools/build_data.py <UnicodeData.txt> <Blocks.txt>
 
 The curated block list below defines which Unicode blocks the app proofs
 against. To add a block, append its exact Blocks.txt name to a group.
+
+blocks.json is loaded on every page view, so it carries only what the
+coverage report needs. names.json holds the character name of every assigned
+codepoint (~1.4 MB) and is imported lazily, when the reader opens the
+"Everything in the font" section.
 """
 
 import json
@@ -98,8 +104,15 @@ CURATED_GROUPS = [
 
 
 def parse_unicode_data(path):
-    """Return dict codepoint -> (category, name) for every assigned codepoint."""
+    """Parse UnicodeData.txt.
+
+    Returns (assigned, name_ranges) where assigned maps codepoint ->
+    (category, name) for every assigned codepoint, and name_ranges lists the
+    (first, last, prefix) blocks whose names UnicodeData.txt gives
+    algorithmically (CJK ideographs, Hangul syllables, Tangut...).
+    """
     assigned = {}
+    name_ranges = []
     range_first = None
     for line in Path(path).read_text(encoding="utf-8").splitlines():
         if not line.strip():
@@ -115,10 +128,11 @@ def parse_unicode_data(path):
             assert first_cat == cat
             for c in range(first_cp, cp + 1):
                 assigned[c] = (cat, f"{range_name}-{c:04X}")
+            name_ranges.append([first_cp, cp, range_name])
             range_first = None
             continue
         assigned[cp] = (cat, name)
-    return assigned
+    return assigned, name_ranges
 
 
 def parse_blocks(path):
@@ -143,9 +157,44 @@ def to_ranges(codepoints):
     return ranges
 
 
+def category_runs(assigned):
+    """Compress codepoint -> category into [[start, end, catIndex], ...].
+
+    Covers every assigned codepoint, so the app can also tell "assigned" from
+    "unassigned" outside the curated blocks: a codepoint in no run has not
+    been assigned by Unicode.
+    """
+    cat_names = sorted({cat for cat, _ in assigned.values()})
+    index = {cat: i for i, cat in enumerate(cat_names)}
+    runs = []
+    for cp in sorted(assigned):
+        i = index[assigned[cp][0]]
+        if runs and runs[-1][1] == cp - 1 and runs[-1][2] == i:
+            runs[-1][1] = cp
+        else:
+            runs.append([cp, cp, i])
+    return cat_names, runs
+
+
+def write_names(path, assigned, name_ranges):
+    """Character names: algorithmic ranges as rules, everything else listed."""
+    in_range = set()
+    for first, last, _ in name_ranges:
+        in_range.update(range(first, last + 1))
+    # Keys are 4-or-more-digit hex, matching how the app formats codepoints.
+    names = {
+        f"{cp:04X}": name for cp, (_, name) in assigned.items() if cp not in in_range
+    }
+    path.write_text(
+        json.dumps({"ranges": name_ranges, "names": names}, separators=(",", ":")),
+        encoding="utf-8",
+    )
+    return len(names)
+
+
 def main():
     unicode_data_path, blocks_path = sys.argv[1], sys.argv[2]
-    assigned = parse_unicode_data(unicode_data_path)
+    assigned, name_ranges = parse_unicode_data(unicode_data_path)
     all_blocks = parse_blocks(blocks_path)
     by_name = {name: (start, end) for start, end, name in all_blocks}
 
@@ -178,22 +227,34 @@ def main():
             })
         groups.append({"name": group_name, "blocks": blocks})
 
+    cat_names, cat_runs = category_runs(assigned)
     out = {
         "unicodeVersion": version,
         "groups": groups,
         # Every Unicode block (name + range only) so glyphs outside the curated
         # set can still be attributed to a block by name.
         "allBlocks": [[s, e, n] for s, e, n in all_blocks],
+        # General category of every assigned codepoint, run-length encoded, so
+        # glyphs outside the curated set render correctly too (combining marks
+        # need a dotted circle, invisible characters a placeholder).
+        "catNames": cat_names,
+        "catRuns": cat_runs,
     }
 
-    out_path = Path(__file__).resolve().parent.parent / "src" / "data" / "blocks.json"
-    out_path.parent.mkdir(parents=True, exist_ok=True)
+    data_dir = Path(__file__).resolve().parent.parent / "src" / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    out_path = data_dir / "blocks.json"
     out_path.write_text(json.dumps(out, separators=(",", ":")), encoding="utf-8")
+    names_path = data_dir / "names.json"
+    n_names = write_names(names_path, assigned, name_ranges)
 
     total = sum(b["assignedCount"] for g in groups for b in g["blocks"])
     n_blocks = sum(len(g["blocks"]) for g in groups)
     print(f"Unicode {version}: {n_blocks} curated blocks, {total} assigned codepoints")
-    print(f"wrote {out_path}")
+    print(f"wrote {out_path} ({out_path.stat().st_size // 1024} KB, "
+          f"{len(cat_runs)} category runs)")
+    print(f"wrote {names_path} ({names_path.stat().st_size // 1024} KB, "
+          f"{n_names} names + {len(name_ranges)} algorithmic ranges)")
 
 
 if __name__ == "__main__":

@@ -23,6 +23,8 @@
   --bar-gap: #35352e;  /* barcode: assigned but missing */
   --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   --glyph: 'ProofFont', 'Helvetica Neue', Arial, sans-serif;
+  /* the same font rebuilt with one private-use codepoint per glyph id */
+  --glyph-gid: 'ProofGid', 'Helvetica Neue', Arial, sans-serif;
 }
 
 :root[data-theme='light'] {
@@ -368,33 +370,34 @@ button, input, label { font: inherit; }
 .btn-dl { font-size: 11px; padding: 5px 10px; border-color: var(--btn2); color: var(--ink2); }
 .btn-dl:hover { border-color: var(--ink); }
 
+/* ------------------------------------------- everything in the font */
+
+/* glyphs addressed by glyph id, drawn with the rebuilt copy of the font */
+.cell.gid .g { font-family: var(--glyph-gid); }
+/* marks are drawn far off the baseline, so let them out of the line box */
+.cell.gid.mark .g { overflow: visible; }
+.cell.gid .cp {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink2);
+}
+
+/* keeps the header's three columns aligned where there is no barcode */
+.bar-slot { display: block; }
+
 /* --------------------------------------------------- missing-only mode */
 
 main[data-filter='missing'] .cell.present,
 main[data-filter='missing'] .cell.extra { display: none; }
 main[data-filter='missing'] .block[data-missing='0'],
-main[data-filter='missing'] .outside { display: none; }
+main[data-filter='missing'] .everything { display: none; }
 
-/* ------------------------------------------------------------- outside */
+/* ---------------------------------------------------------------- notes */
 
 .note { margin: 4px 0 12px; font-size: 12px; color: var(--ink2); }
-
-.chips {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.chips li {
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--card);
-  padding: 4px 12px;
-  font-size: 11.5px;
-}
-.chips b { font-weight: 600; }
+.note.warn { color: var(--amber); }
 
 /* -------------------------------------------------------------- footer */
 

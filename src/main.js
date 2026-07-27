@@ -4,6 +4,7 @@ import '@fontsource/ibm-plex-mono/600.css'
 import './styles.css'
 
 import { parseFont } from './font/parse.js'
+import { buildGidFont } from './font/rebuild.js'
 import { buildReport, unicodeVersion } from './coverage.js'
 import { renderSpecimen, renderReport, showError } from './ui.js'
 
@@ -58,7 +59,7 @@ input.addEventListener('change', () => {
   input.value = ''
 })
 
-let activeFontFace = null
+const activeFaces = new Map() // family -> FontFace
 
 async function handleFile(file) {
   showError('')
@@ -66,8 +67,12 @@ async function handleFile(file) {
   try {
     const buffer = await file.arrayBuffer()
     const font = await parseFont(buffer)
-    const fontRendered = await installFontFace(buffer)
-    renderReport(main, buildReport(font.codepoints), font, fontRendered)
+    const fontRendered = await installFontFace(buffer, 'ProofFont')
+    // A copy of the font with one private-use codepoint per glyph id, so the
+    // "Everything in the font" section can draw unencoded glyphs too.
+    const gidFont = buildGidFont(font)
+    const gidRendered = gidFont ? await installFontFace(gidFont, 'ProofGid') : false
+    renderReport(main, buildReport(font), font, { font: fontRendered, gid: gidRendered })
     main.hidden = false
     const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
     main.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth' })
@@ -79,19 +84,20 @@ async function handleFile(file) {
   }
 }
 
-// Registers the uploaded font as "ProofFont" so grid cells render with the
-// font itself. Returns false if the browser cannot use the file (coverage
-// still works from the parsed cmap).
-async function installFontFace(buffer) {
-  if (activeFontFace) {
-    document.fonts.delete(activeFontFace)
-    activeFontFace = null
+// Registers a font binary under a CSS family name so grid cells render with
+// the font itself. Returns false if the browser cannot use it (coverage still
+// works from the parsed cmap).
+async function installFontFace(buffer, family) {
+  const previous = activeFaces.get(family)
+  if (previous) {
+    document.fonts.delete(previous)
+    activeFaces.delete(family)
   }
   try {
-    const face = new FontFace('ProofFont', buffer)
+    const face = new FontFace(family, buffer)
     await face.load()
     document.fonts.add(face)
-    activeFontFace = face
+    activeFaces.set(family, face)
     return true
   } catch {
     return false

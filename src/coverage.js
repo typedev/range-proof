@@ -12,7 +12,8 @@ export const unicodeVersion = data.unicodeVersion
 //             (common for provisional currency signs etc.)
 // Unassigned codepoints the font does not cover produce no cell at all.
 
-export function buildReport(codepoints) {
+export function buildReport(font) {
+  const codepoints = font.codepoints
   const groups = data.groups.map((g) => ({
     name: g.name,
     blocks: g.blocks.map((b) => buildBlock(b, codepoints)),
@@ -25,7 +26,7 @@ export function buildReport(codepoints) {
     mapped: codepoints.size,
   }
 
-  return { groups, totals, outside: buildOutside(codepoints, curated) }
+  return { groups, totals, all: buildAll(codepoints), glyphs: buildGlyphs(font) }
 }
 
 function buildBlock(block, codepoints) {
@@ -69,30 +70,80 @@ function buildBlock(block, codepoints) {
   }
 }
 
-// Codepoints mapped by the font that fall outside every curated block,
-// summarized per Unicode block name.
-function buildOutside(codepoints, curated) {
-  const counts = new Map()
-  for (const cp of codepoints) {
-    if (curated.some((b) => cp >= b.start && cp <= b.end)) continue
-    const name = findBlockName(cp)
-    counts.set(name, (counts.get(name) || 0) + 1)
+// ------------------------------------------------- everything in the font
+
+// Every codepoint the font maps, curated or not, grouped by its real Unicode
+// block. Unlike the coverage report above this lists only what is there:
+// these are the font's contents, not a checklist.
+function buildAll(codepoints) {
+  const byBlock = new Map()
+  for (const cp of [...codepoints].sort((a, b) => a - b)) {
+    const block = findBlock(cp)
+    const key = block ? block[0] : -1
+    let entry = byBlock.get(key)
+    if (!entry) {
+      entry = {
+        name: block ? block[2] : 'Outside any block',
+        start: block ? block[0] : cp,
+        end: block ? block[1] : cp,
+        cps: [],
+        assignedCount: 0,
+        extraCount: 0,
+      }
+      byBlock.set(key, entry)
+    }
+    entry.cps.push(cp)
+    if (!block) entry.end = cp
+    if (categoryOf(cp)) entry.assignedCount++
+    else entry.extraCount++
   }
-  return [...counts.entries()]
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count)
+
+  const blocks = [...byBlock.values()].sort((a, b) => a.start - b.start)
+  return { blocks, count: codepoints.size }
 }
 
-function findBlockName(cp) {
+// Glyphs no codepoint reaches: alternates, ligature targets, mark components.
+// They are real glyphs in the font, just not addressable as characters.
+function buildGlyphs({ numGlyphs, encodedGids, glyphNames, zeroWidthGids }) {
+  if (!numGlyphs) return { numGlyphs: null, encoded: 0, unencoded: [] }
+  const unencoded = []
+  for (let gid = 0; gid < numGlyphs; gid++) {
+    if (encodedGids.has(gid)) continue
+    unencoded.push({
+      gid,
+      name: glyphNames?.[gid] ?? null,
+      mark: zeroWidthGids?.has(gid) ?? false,
+    })
+  }
+  return { numGlyphs, encoded: encodedGids.size, unencoded, named: !!glyphNames }
+}
+
+// General category of an assigned codepoint, or null when Unicode has not
+// assigned it. Run-length data, so a binary search over the runs.
+export function categoryOf(cp) {
+  const runs = data.catRuns // sorted [[start, end, catIndex], ...]
+  let lo = 0
+  let hi = runs.length - 1
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1
+    const [start, end, cat] = runs[mid]
+    if (cp < start) hi = mid - 1
+    else if (cp > end) lo = mid + 1
+    else return data.catNames[cat]
+  }
+  return null
+}
+
+function findBlock(cp) {
   const blocks = data.allBlocks // sorted [[start, end, name], ...]
   let lo = 0
   let hi = blocks.length - 1
   while (lo <= hi) {
     const mid = (lo + hi) >> 1
-    const [start, end, name] = blocks[mid]
-    if (cp < start) hi = mid - 1
-    else if (cp > end) lo = mid + 1
-    else return name
+    const block = blocks[mid]
+    if (cp < block[0]) hi = mid - 1
+    else if (cp > block[1]) lo = mid + 1
+    else return block
   }
-  return 'Unassigned'
+  return null
 }
