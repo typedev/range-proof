@@ -26,7 +26,12 @@ export function buildReport(font) {
     mapped: codepoints.size,
   }
 
-  return { groups, totals, all: buildAll(codepoints), glyphs: buildGlyphs(font) }
+  return {
+    groups,
+    totals,
+    outside: buildOutside(codepoints, curated),
+    glyphs: buildGlyphs(font),
+  }
 }
 
 function buildBlock(block, codepoints) {
@@ -70,14 +75,15 @@ function buildBlock(block, codepoints) {
   }
 }
 
-// ------------------------------------------------- everything in the font
+// ---------------------------------------------------- elsewhere in the font
 
-// Every codepoint the font maps, curated or not, grouped by its real Unicode
-// block. Unlike the coverage report above this lists only what is there:
-// these are the font's contents, not a checklist.
-function buildAll(codepoints) {
+// Mapped codepoints the curated blocks above do not already show, grouped by
+// their real Unicode block. Unlike the coverage report this lists only what
+// is there: it is the rest of the font's contents, not a checklist.
+function buildOutside(codepoints, curated) {
   const byBlock = new Map()
   for (const cp of [...codepoints].sort((a, b) => a - b)) {
+    if (curated.some((b) => cp >= b.start && cp <= b.end)) continue
     const block = findBlock(cp)
     const key = block ? block[0] : -1
     let entry = byBlock.get(key)
@@ -99,7 +105,7 @@ function buildAll(codepoints) {
   }
 
   const blocks = [...byBlock.values()].sort((a, b) => a.start - b.start)
-  return { blocks, count: codepoints.size }
+  return { blocks, count: blocks.reduce((n, b) => n + b.cps.length, 0) }
 }
 
 // Glyphs no codepoint reaches: alternates, ligature targets, mark components.

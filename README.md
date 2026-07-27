@@ -24,10 +24,11 @@ unreleased fonts are safe to proof.
   what's present, missing and unofficial.
 - **Missing lists as text** (`U+XXXX<tab>CHARACTER NAME`), per block or for
   the whole font.
-- **Everything in the font** — the file's own inventory rather than a
-  checklist: every mapped codepoint in its real Unicode block (named from the
-  full UCD, not just the curated blocks), plus **unencoded glyphs** —
-  alternates, ligature targets and mark components that no codepoint reaches.
+- **Elsewhere in the font** — the rest of the file's contents, listed rather
+  than checked: mapped codepoints the curated blocks don't already show, in
+  their real Unicode block (named from the full UCD), plus **unencoded
+  glyphs** — alternates, ligature targets and mark components that no
+  codepoint reaches.
   Those are drawn by rebuilding the font in memory with a cmap that maps one
   private-use codepoint to every glyph id; glyph names come from `post` or the
   CFF charset, and the list downloads as text. Grids in this section are built

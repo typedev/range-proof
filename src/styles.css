@@ -370,12 +370,12 @@ button, input, label { font: inherit; }
 .btn-dl { font-size: 11px; padding: 5px 10px; border-color: var(--btn2); color: var(--ink2); }
 .btn-dl:hover { border-color: var(--ink); }
 
-/* ------------------------------------------- everything in the font */
+/* ------------------------------------------- elsewhere in the font */
 
 /* glyphs addressed by glyph id, drawn with the rebuilt copy of the font */
-.cell.gid .g { font-family: var(--glyph-gid); }
-/* marks are drawn far off the baseline, so let them out of the line box */
-.cell.gid.mark .g { overflow: visible; }
+/* accents and other glyphs drawn far off the baseline would be clipped by
+   the line box, and in an inventory a blank cell reads as a bug */
+.cell.gid .g { font-family: var(--glyph-gid); overflow: visible; }
 .cell.gid .cp {
   max-width: 100%;
   overflow: hidden;
@@ -392,7 +392,7 @@ button, input, label { font: inherit; }
 main[data-filter='missing'] .cell.present,
 main[data-filter='missing'] .cell.extra { display: none; }
 main[data-filter='missing'] .block[data-missing='0'],
-main[data-filter='missing'] .everything { display: none; }
+main[data-filter='missing'] .outside { display: none; }
 
 /* ---------------------------------------------------------------- notes */
 

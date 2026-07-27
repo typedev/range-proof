@@ -72,7 +72,7 @@ export function renderReport(main, report, font, rendered) {
       <nav class="rail" aria-label="Blocks">${railHtml(report)}</nav>
       <div class="blocks">
         ${report.groups.map(groupHtml).join('')}
-        ${everythingHtml(report)}
+        ${outsideHtml(report)}
       </div>
     </div>`
 
@@ -90,9 +90,11 @@ function railHtml(report) {
         <span class="rail-n">${b.presentCount}/${b.assignedCount}</span></a>`
     }).join('')}`).join('')
 
-  const everything = `
-    <div class="rail-group">Everything in the font</div>
-    ${report.all.blocks.map((b) => `
+  if (!hasOutside(report)) return curated
+
+  const outside = `
+    <div class="rail-group">Elsewhere in the font</div>
+    ${report.outside.blocks.map((b) => `
       <a class="rail-item" href="#a-${hex(b.start)}">
         <span class="rail-name">${esc(b.name)}</span>
         <span class="rail-n">${b.cps.length}</span></a>`).join('')}
@@ -101,8 +103,11 @@ function railHtml(report) {
         <span class="rail-name">Unencoded glyphs</span>
         <span class="rail-n">${report.glyphs.unencoded.length}</span></a>` : ''}`
 
-  return curated + everything
+  return curated + outside
 }
+
+const hasOutside = (report) =>
+  report.outside.blocks.length > 0 || report.glyphs.unencoded.length > 0
 
 function groupHtml(group) {
   return `<section class="group">
@@ -174,33 +179,43 @@ function barcodeSvg(name, start, end, items) {
     role="img" aria-label="Coverage map of ${esc(name)}">${rects}</svg>`
 }
 
-// ------------------------------------------------- everything in the font
+// ---------------------------------------------------- elsewhere in the font
 
-// The font's own inventory rather than a checklist: every mapped codepoint,
-// in its real Unicode block, plus the glyphs no codepoint reaches. Grids are
-// filled in on demand (see fillLazyBlock) — a CJK font would otherwise build
-// tens of thousands of cells nobody asked to see.
-function everythingHtml(report) {
-  const { all, glyphs } = report
-  return `<section class="group everything">
-    <h2 class="group-name">Everything in the font</h2>
-    <p class="note">Not a checklist — the full contents of the file:
-      ${all.count} mapped codepoint${all.count === 1 ? '' : 's'} across
-      ${all.blocks.length} Unicode block${all.blocks.length === 1 ? '' : 's'}${
-        glyphs.unencoded.length
-          ? `, and ${glyphs.unencoded.length} glyphs no codepoint reaches`
-          : ''}. Open a block to draw it.</p>
-    ${all.blocks.map(allBlockHtml).join('')}
+// What the blocks above do not already show: mapped codepoints outside the
+// curated set, in their real Unicode blocks, plus the glyphs no codepoint
+// reaches. Grids are filled in on demand (see fillLazyBlock) — a CJK font
+// would otherwise build tens of thousands of cells nobody asked to see.
+function outsideHtml(report) {
+  const { outside, glyphs } = report
+  if (!hasOutside(report)) return ''
+
+  const parts = []
+  if (outside.blocks.length) {
+    parts.push(`${plural(outside.count, 'mapped codepoint')} in
+      ${plural(outside.blocks.length, 'Unicode block')} outside the blocks
+      above`)
+  }
+  if (glyphs.unencoded.length) {
+    parts.push(`${glyphs.unencoded.length} glyphs no codepoint reaches`)
+  }
+
+  return `<section class="group outside">
+    <h2 class="group-name">Elsewhere in the font</h2>
+    <p class="note">The rest of the file's contents, listed rather than
+      checked: ${parts.join(', and ')}. Open a block to draw it.</p>
+    ${outside.blocks.map(outsideBlockHtml).join('')}
     ${unencodedHtml(glyphs)}
   </section>`
 }
 
-function allBlockHtml(b) {
+const plural = (n, noun) => `${n} ${noun}${n === 1 ? '' : 's'}`
+
+function outsideBlockHtml(b) {
   const items = b.cps.map((cp) => ({ cp, state: categoryOf(cp) ? 'present' : 'extra' }))
   const extras = b.extraCount
     ? `<span class="n-extra">+${b.extraCount} unassigned</span>` : ''
 
-  return `<details class="block" id="a-${hex(b.start)}" data-lazy="all"
+  return `<details class="block" id="a-${hex(b.start)}" data-lazy="block"
       data-start="${hex(b.start)}">
     <summary class="block-head">
       <span class="block-title">${esc(b.name)}
@@ -252,15 +267,15 @@ async function fillLazyBlock(details) {
     return
   }
 
-  const block = currentReport.all.blocks.find(
+  const block = currentReport.outside.blocks.find(
     (b) => hex(b.start) === details.dataset.start)
   if (!block) return
   // Character names for the whole of Unicode are a separate download.
   await loadCharNames().catch(() => null)
-  grid.innerHTML = block.cps.map(allCellHtml).join('')
+  grid.innerHTML = block.cps.map(outsideCellHtml).join('')
 }
 
-function allCellHtml(cp) {
+function outsideCellHtml(cp) {
   const cat = categoryOf(cp)
   const name = charName(cp)
   return cellHtml({ cp, name, cat, state: cat ? 'present' : 'extra' })
