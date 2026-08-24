@@ -22,9 +22,11 @@
   --btn2: #55554c;     /* secondary button border */
   --bar-gap: #35352e;  /* barcode: assigned but missing */
   --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  --glyph: 'ProofFont', 'Helvetica Neue', Arial, sans-serif;
+  /* stand-in face for characters the proofed font does not carry */
+  --fallback: 'Helvetica Neue', Arial, sans-serif;
+  --glyph: 'ProofFont', var(--fallback);
   /* the same font rebuilt with one private-use codepoint per glyph id */
-  --glyph-gid: 'ProofGid', 'Helvetica Neue', Arial, sans-serif;
+  --glyph-gid: 'ProofGid', var(--fallback);
 }
 
 :root[data-theme='light'] {
@@ -337,7 +339,15 @@ button, input, label { font: inherit; }
 }
 
 .cell.missing { background: var(--recess); border-color: transparent; }
-.cell.missing .g { color: var(--dim); }
+/* A missing character must never be drawn by the proofed font. With ProofFont
+   first in the list the shaper can decompose the codepoint and compose it out
+   of parts the font does have (U+0400 out of Ye + combining grave, say), and
+   the cell would read as covered when the cmap has no such mapping.
+
+   What the fallback face draws is left alone, colour emoji included: that is
+   honestly what the system has for the codepoint, and recolouring it would be
+   its own kind of lie. */
+.cell.missing .g { font-family: var(--fallback); color: var(--dim); }
 .cell.missing .cp { color: var(--cp-missing); }
 
 .cell.extra { background: var(--amber-bg); border-color: var(--amber-line); }
