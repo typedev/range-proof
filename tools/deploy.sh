@@ -5,6 +5,10 @@
 set -euo pipefail
 
 SRC_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+
+# prefer the repo-local Node toolchain (.tools/node) when one is installed
+[ -x "$SRC_DIR/.tools/node/bin/node" ] && PATH="$SRC_DIR/.tools/node/bin:$PATH"
+
 PAGES_REPO="${PAGES_REPO:-$SRC_DIR/../typedev.github.io}"
 TARGET="$PAGES_REPO/rangeproof"
 

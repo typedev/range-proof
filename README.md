@@ -37,10 +37,22 @@ unreleased fonts are safe to proof.
 
 ## Development
 
+No system Node needed — `tools/dev.sh` installs a repo-local toolchain into
+`.tools/node` (gitignored) on first run, installs dependencies, and starts the
+dev server on http://localhost:5173.
+
+```sh
+./tools/dev.sh              # everything, from a clean checkout
+./tools/dev.sh --host       # ...exposed on the LAN, for testing on a phone
+```
+
+With Node already on the PATH the plain scripts work as usual:
+
 ```sh
 npm install
 npm run dev      # local dev server
 npm run build    # static build in dist/ — host anywhere
+npm run setup    # install the repo-local Node toolchain (NODE_VERSION=v… to pin)
 ```
 
 ## Architecture

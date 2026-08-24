@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Unicode block coverage proofing for fonts — runs entirely in the browser",
   "scripts": {
+    "setup": "bash tools/node-setup.sh",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
